@@ -2,25 +2,25 @@
   "name": "playwright-failure-triage",
   "version": "1.0.0",
   "description": "Installable Playwright failure triage: classify, live-verify, file Jira, HITL UI",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "Agents/dist/index.js",
+  "types": "Agents/dist/index.d.ts",
   "bin": {
-    "playwright-triage": "./cli.cjs"
+    "playwright-triage": "./Agents/cli.cjs"
   },
   "files": [
-    "dist",
-    "ui",
-    "cli.cjs",
-    "triage.config.example.json",
+    "Agents/dist",
+    "Agents/ui",
+    "Agents/cli.cjs",
+    "Agents/triage.config.example.json",
     ".env.example",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p Agents/tsconfig.json",
     "prepare": "npm run build",
     "prepack": "npm run build",
-    "triage": "node ./cli.cjs",
-    "triage:ui": "node ./cli.cjs ui"
+    "triage": "node ./Agents/cli.cjs",
+    "triage:ui": "node ./Agents/cli.cjs ui"
   },
   "engines": {
     "node": ">=18"
@@ -40,5 +40,9 @@
     "test-failures",
     "cursor"
   ],
-  "license": "ISC"
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnkitaSPal/Playwright-failure-triage.git"
+  }
 }

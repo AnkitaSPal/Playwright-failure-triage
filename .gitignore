@@ -2,8 +2,11 @@
 .env.*
 !.env.example
 node_modules/
+dist/
 .cursor-agent-store/
+.last-triage-report.json
+expected-snapshots/
+.triage/
 test-results/
 playwright-report/
-.triage/
 *.tgz
