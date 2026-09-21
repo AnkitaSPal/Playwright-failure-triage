@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.cursor-agent-store/
+test-results/
+playwright-report/
+.triage/
+*.tgz
