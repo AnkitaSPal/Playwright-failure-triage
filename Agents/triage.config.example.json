@@ -1,0 +1,39 @@
+{
+  "jsonReportPath": "test-results/test-results.json",
+  "expectedSnapshotsDir": ".triage/expected-snapshots",
+  "cachePath": ".triage/last-triage-report.json",
+  "uiPort": 3001,
+  "realBugManualReviewThreshold": 5,
+  "loginFromSpec": true,
+  "jira": {
+    "cloudId": "https://your-site.atlassian.net",
+    "projectKey": "PROJ",
+    "issueType": "Bug"
+  },
+  "apps": [
+    {
+      "key": "myapp",
+      "baseURLEnv": "APP_BASE_URL",
+      "baseURL": "https://uat.example.com",
+      "projectMatch": "myapp",
+      "defaultRole": "user",
+      "login": {
+        "skip": false,
+        "usernameSelector": "input#username",
+        "passwordSelector": "input#password",
+        "submitSelector": "input[type=submit]",
+        "notes": "Describe the login page for live verify"
+      },
+      "roles": {
+        "user": {
+          "usernameEnv": "APP_TEST_USERNAME",
+          "passwordEnv": "APP_TEST_PASSWORD"
+        },
+        "admin": {
+          "usernameEnv": "APP_TEST_ADMIN_USERNAME",
+          "passwordEnv": "APP_TEST_ADMIN_PASSWORD"
+        }
+      }
+    }
+  ]
+}

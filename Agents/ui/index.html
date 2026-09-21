@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Failure Triage</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">TEST AUTOMATION TRAIGE REPORT</p>
+        <h1>Failure triage</h1>
+      </div>
+      <div class="topbar-actions">
+        <button id="run-analysis" class="primary">Run analysis</button>
+      </div>
+    </header>
+
+    <section class="status-bar">
+      <span id="job-status" class="pill idle">idle</span>
+      <p id="job-phase">Load a Playwright JSON report, then review and file tickets here.</p>
+    </section>
+
+    <section id="summary" class="summary" hidden></section>
+    <section id="batch" class="panel" hidden></section>
+
+    <nav class="tabs" id="tabs" hidden>
+      <button data-tab="real_bug" class="active">Real bugs</button>
+      <button data-tab="locator_drift">Locator drift</button>
+      <button data-tab="environment_infra">Infra</button>
+      <button data-tab="flaky_timing">Flaky / timing</button>
+      <button data-tab="test_script">Test script</button>
+      <button data-tab="snapshot_mismatch">Snapshot mismatch</button>
+    </nav>
+
+    <main id="boards" hidden>
+      <section class="board" data-board="real_bug">
+        <div class="board-toolbar">
+          <label><input type="checkbox" id="select-all-bugs" /> Select all</label>
+          <div class="toolbar-actions">
+            <button id="verify-selected" class="ghost">Verify selected live</button>
+            <button id="file-selected" class="primary">File selected in Jira</button>
+          </div>
+        </div>
+        <div id="real-bugs" class="stack"></div>
+      </section>
+      <section class="board" data-board="locator_drift" hidden>
+        <div id="locator-drift" class="stack"></div>
+      </section>
+      <section class="board" data-board="environment_infra" hidden>
+        <div id="infra" class="stack"></div>
+      </section>
+      <section class="board" data-board="flaky_timing" hidden>
+        <div id="flaky" class="stack"></div>
+      </section>
+      <section class="board" data-board="test_script" hidden>
+        <div id="test-scripts" class="stack"></div>
+      </section>
+      <section class="board" data-board="snapshot_mismatch" hidden>
+        <div id="snapshot-mismatches" class="stack"></div>
+      </section>
+    </main>
+
+    <aside class="log-panel">
+      <h2>Activity</h2>
+      <pre id="logs"></pre>
+    </aside>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "outDir": "dist",
+    "rootDir": ".",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "strict": false,
+    "types": ["node"]
+  },
+  "include": [
+    "agentFactory.ts",
+    "assessInfraIssue.ts",
+    "batchAssessment.ts",
+    "classify.ts",
+    "config.ts",
+    "expectedSnapshots.ts",
+    "flattenResults.ts",
+    "gaurdRails.ts",
+    "index.ts",
+    "init.ts",
+    "jiraLogging.ts",
+    "loginContext.ts",
+    "runTraige.ts",
+    "triagePipeline.ts",
+    "triageServer.ts",
+    "triageTypes.ts",
+    "verifyLocatorDrift.ts",
+    "verifyRealBug.ts"
+  ]
+}
