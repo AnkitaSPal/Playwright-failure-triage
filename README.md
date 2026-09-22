@@ -64,10 +64,14 @@ npx playwright-triage ui
 
 Dashboard: `http://localhost:3001` → **Run analysis**.
 
+The first analysis calls the classifier LLM and writes `.triage/last-triage-report.json` (including a `sourceHash` of the failure set). **Run analysis** again, or `npx playwright-triage`, **skips the LLM** when title, project, status, and error text are unchanged. The activity log will say *Reusing cached categories; skipped LLM.* Live-verify and Jira results on that cache are kept.
+
+A new test run that changes an error (or deleting `.triage/last-triage-report.json`) forces a fresh classification.
+
 | Command | What it does |
 |---|---|
 | `npx playwright-triage init` | Write `triage.config.json` in the host project |
-| `npx playwright-triage` | CLI classify / verify / Jira |
+| `npx playwright-triage` | CLI classify / verify / Jira (reuses cache when `sourceHash` matches) |
 | `npx playwright-triage ui` | HITL dashboard |
 | `npx playwright-triage help` | Usage |
 

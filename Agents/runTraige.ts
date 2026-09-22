@@ -3,6 +3,7 @@ import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { flattenResults } from "./flattenResults";
 import type { NormalizedFailure } from "./flattenResults";
+import { hashFailures, loadCachedReport } from "./triagePipeline";
 import { triageAll } from "./classify";
 import type { TriageResult, FailureCategory } from "./classify";
 import { assessBatch } from "./batchAssessment";
@@ -18,6 +19,33 @@ const REAL_BUG_MANUAL_REVIEW_THRESHOLD =
 
 async function main() {
   const failures = flattenResults(config.json_report_path);
+  const sourceHash = hashFailures(failures);
+  const cached = loadCachedReport();
+  if (cached?.sourceHash && cached.sourceHash === sourceHash) {
+    console.log(
+      "Playwright failures unchanged since last analysis. Reusing cached categories; skipped LLM.",
+    );
+    console.log(
+      JSON.stringify(
+        {
+          generatedAt: cached.generatedAt,
+          sourceHash: cached.sourceHash,
+          failureCount: cached.failureCount,
+          batch: cached.batch,
+          realBugs: cached.realBugs.length,
+          locatorDrift: cached.locatorDrift.length,
+          flakyTiming: cached.flakyTiming.length,
+          testScripts: cached.testScripts.length,
+          snapshotMismatches: cached.snapshotMismatches.length,
+          environmentInfra: cached.environmentInfra.items.length,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   if (failures.length === 0) {
     console.log("No failed tests to triage.");
     return;

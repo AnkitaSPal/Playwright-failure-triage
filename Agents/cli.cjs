@@ -31,6 +31,9 @@ Run from the Playwright project root after: npm install playwright-failure-triag
   npx playwright-triage          Classify the JSON report (CLI)
   npx playwright-triage ui       HITL dashboard (http://localhost:3001)
 
+Rerun: same failure set (title, project, status, error) reuses
+.triage/last-triage-report.json and skips the classifier LLM.
+
 Host project needs:
   - playwright.config.ts json reporter → test-results/test-results.json
   - .env CURSOR_API_KEY

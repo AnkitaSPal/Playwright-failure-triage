@@ -8,5 +8,6 @@ export {
   fileSelectedTickets,
   loadCachedReport,
   saveReport,
+  hashFailures,
 } from "./triagePipeline";
 export type { TriageReport, TriageJobState } from "./triageTypes";

@@ -37,6 +37,12 @@ test-results/**/test-failed-*.png
 flattenResults.ts  ──► NormalizedFailure[]
     │
     ▼
+sourceHash vs .triage/last-triage-report.json
+    │
+    ├─ same hash ──────────► reuse cache (no LLM)
+    └─ new / missing hash ─► classify below
+    │
+    ▼
 batchAssessment.ts  ──► one shared cause? (uniform category)
     │
     ├─ mixed ──────────────► classify.ts (per unexpected failure)
@@ -76,6 +82,8 @@ Skipped from the JSON report: tests with status `expected` or `skipped`. Kept: `
 
 `classify.ts` only sends **`unexpected`** failures to the LLM. Playwright already labeled `flaky`.
 
+If `.triage/last-triage-report.json` already has a `sourceHash` that matches the current failure set (test title, project, status, error message), **Run analysis** and the CLI skip batch + classify and reuse that file.
+
 ---
 
 ## Outputs the pipeline writes
@@ -84,7 +92,7 @@ Paths below are host-project defaults from `triage.config.json` (`cachePath`, `e
 
 | File | When | Contents |
 |---|---|---|
-| `.triage/last-triage-report.json` | After analyze / verify / file / expected-snapshot | Full dashboard state (categories, drafts, verification, Jira keys) |
+| `.triage/last-triage-report.json` | After analyze / verify / file / expected-snapshot | Dashboard state plus `sourceHash`. Same hash on rerun → skip LLM |
 | `.triage/expected-snapshots/<project>__<title>.png` | UI “use actual” or upload | Baseline screenshot |
 | `.cursor-agent-store/*.ndjson` | Cursor SDK local agents | Agent run history (not the HITL report) |
 | Jira issue | File in Jira | Bug with steps / expected / actual / logs; screenshot attached when the PNG exists on disk |
@@ -99,7 +107,7 @@ Paths below are host-project defaults from `triage.config.json` (`cachePath`, `e
 - Loads the cached report from `cachePath` if present.
 - APIs:
   - `GET /api/state` — current job + report
-  - `POST /api/analyze` — `runAnalysis`
+  - `POST /api/analyze` — `runAnalysis` (reuses cache when `sourceHash` matches)
   - `POST /api/verify` — live-check selected real bugs
   - `POST /api/file-jira` — REST-create selected drafts
   - `POST /api/expected-snapshot` — save baseline PNG
@@ -116,6 +124,19 @@ Walks nested `suites → specs → tests → results`. For each failed/flaky tes
 - attempts, `finalStatus`, last `resultStatus` (`failed` / `timedOut` / …)
 - screenshot path, Playwright snapshot attachment paths, `errorLocation`
 - matching file in the expected-snapshots dir if one exists
+
+`hashFailures()` then SHA-256s title + project + `finalStatus` + `resultStatus` + `errorMessage` (order-independent). That value is `sourceHash` on the cached report.
+
+### 2b. Same-report skip — `triagePipeline.ts` / `runTraige.ts`
+
+Before any classifier agent runs:
+
+- Load `cachePath` (default `.triage/last-triage-report.json`).
+- If `cached.sourceHash ===` current hash → return the cached report (UI) or print category counts (CLI). No `batchAssessment`, `classify`, locator, or infra LLM calls.
+- If the cache has no `sourceHash` (older file) → treat as a miss, classify once, then write `sourceHash`.
+- Delete the cache file, or change an error/title/status, to force a new LLM pass.
+
+Verify-live and File-in-Jira still write the same file and **keep** `sourceHash`, so a later analyze does not wipe those results when failures are unchanged.
 
 ### 3. Batch “one root cause?” — `batchAssessment.ts`
 
@@ -178,7 +199,7 @@ Filing is refused if there is no `draftTicket` or if Jira does not return a key.
 | File | Role |
 |---|---|
 | `triageServer.ts` | HTTP server, APIs, static UI |
-| `triagePipeline.ts` | Analyze / verify / file orchestration + cache |
+| `triagePipeline.ts` | Analyze / verify / file + `sourceHash` cache skip |
 | `runTraige.ts` | CLI entry (`npx playwright-triage`) |
 | `triageTypes.ts` | Shared report/card types |
 | `ui/index.html` | Dashboard tabs |
@@ -190,6 +211,7 @@ Filing is refused if there is no `draftTicket` or if Jira does not return a key.
 | File | Role |
 |---|---|
 | `flattenResults.ts` | JSON report → `NormalizedFailure[]` |
+| `hashFailures` (in `triagePipeline.ts`) | SHA-256 of the failure set → `sourceHash` |
 | `batchAssessment.ts` | Uniform vs mixed batch |
 | `classify.ts` | Per-test category + optional Jira draft |
 | `agentFactory.ts` | Cursor agents: classifier, browser (+ close) |
@@ -237,7 +259,8 @@ Filing is refused if there is no `draftTicket` or if Jira does not return a key.
 
 | Step | Runtime | Typical cost |
 |---|---|---|
-| Batch + classify | Local Cursor agent (`composer-2.5`) | Seconds to a minute per call (model + skills) |
+| Rerun, same `sourceHash` | Cache only | Immediate; no classifier call |
+| Batch + classify (hash miss) | Local Cursor agent (`composer-2.5`) | Seconds to a minute per call (model + skills) |
 | Locator / real-bug live check | Local Cursor agent + Playwright MCP | Minutes (login + inspect + `browser_close`) |
 | File Jira | **HTTP REST only** | A few seconds per ticket |
 
@@ -249,8 +272,8 @@ Classifier/browser agents use `CURSOR_API_KEY`. Jira filing does **not**.
 
 1. Run tests, e.g. `npx playwright test tests/example.spec.ts --project=chromium`
 2. `npx playwright-triage ui` → open `http://localhost:3001`
-3. **Run analysis**
+3. **Run analysis** (LLM on first pass; later clicks reuse cache if failures are unchanged)
 4. Review tabs (test script vs real bug vs locator vs infra)
 5. On real bugs with a draft: **Verify selected live** (optional)
 6. **File selected in Jira** → activity shows the new issue key
-7. Re-run tests + analysis after you change code; the cache is stale until then
+7. Re-run tests. Analysis calls the LLM again only when title/project/status/error text changed (or you delete `.triage/last-triage-report.json`)

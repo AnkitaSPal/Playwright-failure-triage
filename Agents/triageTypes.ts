@@ -44,6 +44,8 @@ export interface CategorizedFailure {
 export interface TriageReport {
   generatedAt: string;
   reportPath: string;
+  /** SHA-256 of flattened failures; rerun analysis skips the LLM when this matches. */
+  sourceHash?: string;
   failureCount: number;
   batch: BatchAssessment;
   realBugs: RealBugCard[];

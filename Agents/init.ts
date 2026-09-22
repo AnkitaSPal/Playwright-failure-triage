@@ -18,7 +18,8 @@ export function initTriageConfig(): void {
   1. Edit triage.config.json (apps[], jira.projectKey)
   2. Add Playwright json reporter → test-results/test-results.json
   3. Set CURSOR_API_KEY in .env (and JIRA_* to file tickets)
-  4. npx playwright test && npx playwright-triage ui`);
+  4. npx playwright test && npx playwright-triage ui
+  5. Re-run analysis on the same failures reuses .triage/last-triage-report.json`);
 }
 
 if (require.main === module) {

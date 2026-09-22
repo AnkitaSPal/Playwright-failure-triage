@@ -38,6 +38,7 @@ export interface TriageAppFile {
 export interface TriageFileConfig {
   jsonReportPath?: string;
   expectedSnapshotsDir?: string;
+  /** Host path for last analysis JSON (includes sourceHash for LLM skip). */
   cachePath?: string;
   uiPort?: number;
   realBugManualReviewThreshold?: number;

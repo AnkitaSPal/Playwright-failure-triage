@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { flattenResults } from "./flattenResults";
 import type { NormalizedFailure } from "./flattenResults";
 import { triageAll } from "./classify";
@@ -65,6 +66,19 @@ export function saveReport(report: TriageReport): void {
   const cachePath = reportCachePath();
   fs.mkdirSync(path.dirname(cachePath), { recursive: true });
   fs.writeFileSync(cachePath, JSON.stringify(report, null, 2), "utf8");
+}
+
+/** Stable hash of the failure set so a rerun on the same Playwright result skips the LLM. */
+export function hashFailures(failures: NormalizedFailure[]): string {
+  const canonical = failures
+    .map((f) =>
+      [f.testTitle, f.projectName, f.finalStatus, f.resultStatus ?? "", f.errorMessage].join(
+        "\u0001",
+      ),
+    )
+    .sort()
+    .join("\n");
+  return createHash("sha256").update(canonical).digest("hex");
 }
 
 function emptyGrouped(): Record<FailureCategory, CategorizedFailure[]> {
@@ -141,6 +155,7 @@ async function fillInfra(
 
 /**
  * Classify the Playwright JSON report and enrich locator/infra groups.
+ * If cachePath already has the same sourceHash, reuse it and skip the LLM.
  * Real-bug live verification and Jira filing stay human-triggered.
  */
 export async function runAnalysis(log: LogFn = console.log): Promise<TriageReport> {
@@ -153,8 +168,18 @@ export async function runAnalysis(log: LogFn = console.log): Promise<TriageRepor
 
   log(`Reading failures from ${reportPath}…`);
   const failures = flattenResults(reportPath);
+  const sourceHash = hashFailures(failures);
+  const cached = loadCachedReport();
+  if (cached?.sourceHash && cached.sourceHash === sourceHash) {
+    log(
+      "Playwright failures unchanged since last analysis. Reusing cached categories; skipped LLM.",
+    );
+    return cached;
+  }
+
   if (failures.length === 0) {
     const empty = emptyReport({
+      sourceHash,
       batch: {
         uniform: false,
         reasoning: "No failed tests to triage.",
@@ -220,6 +245,7 @@ export async function runAnalysis(log: LogFn = console.log): Promise<TriageRepor
   const environmentInfra = await fillInfra(grouped.environment_infra, log);
 
   const report = emptyReport({
+    sourceHash,
     failureCount: failures.length,
     batch,
     realBugs: grouped.real_bug
