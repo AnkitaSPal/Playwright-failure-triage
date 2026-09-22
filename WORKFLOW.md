@@ -20,7 +20,7 @@ Port: `TRIAGE_UI_PORT` or **3001**. Restart the UI after changing `.env` or `tri
 
 Live verify needs `apps[]`. Classify and Jira work from the JSON report and screenshots alone.
 
-Package readme: [README.md](../README.md).
+Package readme: [README.md](README.md).
 
 ---
 

@@ -73,6 +73,44 @@ Dashboard: `http://localhost:3001` → **Run analysis**.
 
 Live verify needs `apps[]` (URL + login). Classify and Jira work from the JSON report and screenshots alone.
 
+### Port already in use (`EADDRINUSE`)
+
+Closing the browser tab does **not** stop the dashboard server. The Node process keeps listening on `3001`, so the next `npx playwright-triage ui` fails with `listen EADDRINUSE: address already in use :::3001`.
+
+**Windows — find the leftover PID, then kill it:**
+
+```powershell
+netstat -ano | findstr :3001
+```
+
+The last number on the `LISTENING` line is the PID:
+
+```text
+TCP    0.0.0.0:3001    0.0.0.0:0    LISTENING    4068
+```
+
+```powershell
+Get-Process -Id 4068
+taskkill /PID 4068 /F
+npx playwright-triage ui
+```
+
+One-liner to free port 3001:
+
+```powershell
+Get-NetTCPConnection -LocalPort 3001 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
+
+**macOS / Linux:**
+
+```bash
+lsof -i :3001
+kill <PID>
+npx playwright-triage ui
+```
+
+Replace `3001` / `4068` with the port and PID from the error and `netstat` / `lsof`.
+
 ## Tarball (optional)
 
 From this repo root:

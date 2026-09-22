@@ -13,7 +13,8 @@
     "Agents/cli.cjs",
     "Agents/triage.config.example.json",
     ".env.example",
-    "README.md"
+    "README.md",
+    "WORKFLOW.md"
   ],
   "scripts": {
     "build": "tsc -p Agents/tsconfig.json",
