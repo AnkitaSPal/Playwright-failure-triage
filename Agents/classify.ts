@@ -23,7 +23,25 @@ export interface TriageResult {
   draftTicket?: DraftTicket;// only present when category === "real_bug"
 }
 
-function buildPrompt(failure: NormalizedFailure): string {
+/** Optional run-level hint from batchAssessment. Not a hard label. */
+export interface BatchHint {
+  uniform?: boolean;
+  category?: FailureCategory | null;
+  reasoning?: string;
+}
+
+function buildPrompt(failure: NormalizedFailure, batch?: BatchHint): string {
+    const batchHint =
+      batch?.uniform && batch.category
+        ? `
+  Shared-run hint (do not copy blindly): most failures in this run look like ${batch.category}.
+  Reason: ${batch.reasoning ?? ""}
+  Use that category only if THIS test's error actually matches it.
+  A locator timeout or Expected vs Received is not a worker crash, closed browser, or network error.
+  Classify this test on its own error text.
+`
+        : "";
+
     return `You are triaging a failed Playwright test as a senior QA automation engineer.
    
   Test: ${failure.testTitle}
@@ -33,7 +51,7 @@ function buildPrompt(failure: NormalizedFailure): string {
   Error message: ${failure.errorMessage}
   Stack trace (truncated): ${failure.errorStack.slice(0, 500)}
   Visual comparison attachments: expected=${failure.snapshotExpectedPath ? "yes" : "no"}, actual=${failure.snapshotActualPath ? "yes" : "no"}, diff=${failure.snapshotDiffPath ? "yes" : "no"}
-   
+  ${batchHint}
   Classify this failure into exactly one category:
   - real_bug: the application returned wrong data, state, or content, AND that
     mismatch matches what the test title/intent was trying to prove.
@@ -81,7 +99,8 @@ function buildPrompt(failure: NormalizedFailure): string {
   }
    
   export async function triageFailure(
-    failure: NormalizedFailure
+    failure: NormalizedFailure,
+    batch?: BatchHint,
   ): Promise<TriageResult> {
     // One agent per failure keeps each classification isolated — no leftover
     // context from a previous test's error bleeding into this one's reasoning.
@@ -100,7 +119,7 @@ function buildPrompt(failure: NormalizedFailure): string {
     
     // });
     const agent = await classifyAgent();
-    const run = await agent.send(buildPrompt(failure));
+    const run = await agent.send(buildPrompt(failure, batch));
     const result = await run.wait();
    
     if (result.status !== "finished" || !result.result) {
@@ -126,11 +145,11 @@ function buildPrompt(failure: NormalizedFailure): string {
    
   export async function triageAll(
     failures: NormalizedFailure[],
-    concurrency = 3
+    concurrency = 3,
+    batch?: BatchHint,
   ): Promise<TriageResult[]> {
-    // Only "unexpected" failures (never recovered on retry) go to the agent.
-    // "flaky" ones already told you what they are via Playwright's own
-    // status field — no need to spend an API call classifying them.
+    // flattenResults already drops Playwright "flaky" (failed then passed).
+    // Only true fails ("unexpected") reach here.
     const genuineFailures = failures.filter((f) => f.finalStatus === "unexpected");
    
     const results: TriageResult[] = [];
@@ -140,7 +159,7 @@ function buildPrompt(failure: NormalizedFailure): string {
       while (queue.length > 0) {
         const next = queue.shift();
         if (!next) break;
-        results.push(await triageFailure(next));
+        results.push(await triageFailure(next, batch));
       }
     }
    

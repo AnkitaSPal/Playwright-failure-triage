@@ -43,10 +43,11 @@ sourceHash vs .triage/last-triage-report.json
     └─ new / missing hash ─► classify below
     │
     ▼
-batchAssessment.ts  ──► one shared cause? (uniform category)
+batchAssessment.ts  ──► shared-cause HINT (shown on the dashboard)
     │
-    ├─ mixed ──────────────► classify.ts (per unexpected failure)
-    └─ uniform real_bug ───► classify.ts again to draft/move off Jira board
+    ▼
+classify.ts  ──► every unexpected failure, on its own error
+                 (batch hint is optional context, not a hard label)
     │
     ▼
 Buckets: real_bug | test_script | locator_drift | snapshot_mismatch
@@ -78,9 +79,9 @@ ui/  (dashboard, served from this package)
 | `JIRA_EMAIL` + `JIRA_API_TOKEN` | Atlassian API token for your user | Direct Jira REST create (reporter = that user) |
 | `JIRA_CLOUD_ID`, `JIRA_PROJECT_KEY`, `JIRA_ISSUE_TYPE` | You | Jira site URL, project key, issue type (`Bug`) |
 
-Skipped from the JSON report: tests with status `expected` or `skipped`. Kept: `unexpected` (true fail) and `flaky` (failed then passed on retry).
+Skipped from the JSON report: `expected` (passed), `skipped`, and `flaky` (failed then passed on retry — not shown on the board). Kept: `unexpected` (still failing).
 
-`classify.ts` only sends **`unexpected`** failures to the LLM. Playwright already labeled `flaky`.
+`classify.ts` only sees those unexpected failures. The **Flaky / timing** tab is only for still-failed tests the LLM labels `flaky_timing`, not Playwright-flaky passes.
 
 If `.triage/last-triage-report.json` already has a `sourceHash` that matches the current failure set (test title, project, status, error message), **Run analysis** and the CLI skip batch + classify and reuse that file.
 
@@ -117,7 +118,7 @@ CLI twin: `runTraige.ts` (same analysis; readline for real-bug volume + Jira pic
 
 ### 2. Flatten the Playwright report — `flattenResults.ts`
 
-Walks nested `suites → specs → tests → results`. For each failed/flaky test it keeps:
+Walks nested `suites → specs → tests → results`. For each unexpected (still-failed) test it keeps:
 
 - title, Playwright project name, spec file
 - last error message/stack (ANSI stripped)
@@ -138,18 +139,22 @@ Before any classifier agent runs:
 
 Verify-live and File-in-Jira still write the same file and **keep** `sourceHash`, so a later analyze does not wipe those results when failures are unchanged.
 
-### 3. Batch “one root cause?” — `batchAssessment.ts`
+### 3. Batch “shared root cause?” — `batchAssessment.ts`
 
-One **classifier** Cursor agent looks at all failures and returns:
+One **classifier** Cursor agent looks at all failures and returns a **hint**:
 
 - `uniform: true` + a category if ~80% share a cause
 - otherwise mixed
+
+This is shown on the dashboard. It does **not** assign every test that category.
 
 Uses `agentFactory.createClassifierAgent()` (`composer-2.5`, local, project+user settings).
 
 ### 4. Per-test classify — `classify.ts`
 
-Each **unexpected** failure gets one isolated agent. Categories:
+Every **unexpected** failure gets one isolated agent, even when the batch is uniform. The batch hint is included in the prompt; the model must still follow **this** test’s error. Playwright `flaky` tests are omitted from analysis.
+
+Categories:
 
 | Category | Meaning | Jira? | Live browser? |
 |---|---|---|---|
@@ -161,8 +166,6 @@ Each **unexpected** failure gets one isolated agent. Categories:
 | `environment_infra` | Network, auth, worker crash, browser closed, protocol | No | No |
 
 `draftTicket` is stripped unless category is `real_bug`. Cards without a draft never get File in Jira.
-
-If the batch said uniform `real_bug`, a second classify pass can **move** items to `test_script` (or others) so they leave the Jira board.
 
 ### 5. Auto follow-up during analysis — `triagePipeline.ts`
 

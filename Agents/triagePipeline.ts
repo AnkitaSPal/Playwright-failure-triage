@@ -68,6 +68,9 @@ export function saveReport(report: TriageReport): void {
   fs.writeFileSync(cachePath, JSON.stringify(report, null, 2), "utf8");
 }
 
+/** Bump when classify rules change so an old cache is not reused. */
+const CLASSIFIER_LOGIC_VERSION = "skip-playwright-flaky-v1";
+
 /** Stable hash of the failure set so a rerun on the same Playwright result skips the LLM. */
 export function hashFailures(failures: NormalizedFailure[]): string {
   const canonical = failures
@@ -78,7 +81,9 @@ export function hashFailures(failures: NormalizedFailure[]): string {
     )
     .sort()
     .join("\n");
-  return createHash("sha256").update(canonical).digest("hex");
+  return createHash("sha256")
+    .update(`${CLASSIFIER_LOGIC_VERSION}\n${canonical}`)
+    .digest("hex");
 }
 
 function emptyGrouped(): Record<FailureCategory, CategorizedFailure[]> {
@@ -103,18 +108,6 @@ function groupByCategory(
     if (failure && grouped[result.category]) grouped[result.category].push({ failure, result });
   }
   return grouped;
-}
-
-function asCategorized(
-  failures: NormalizedFailure[],
-  results?: TriageResult[],
-): CategorizedFailure[] {
-  if (!results?.length) return failures.map((failure) => ({ failure }));
-  const byTitle = new Map(results.map((r) => [r.testTitle, r]));
-  return failures.map((failure) => ({
-    failure,
-    result: byTitle.get(failure.testTitle),
-  }));
 }
 
 async function fillLocatorCards(
@@ -194,52 +187,13 @@ export async function runAnalysis(log: LogFn = console.log): Promise<TriageRepor
   const batch = await assessBatch(failures);
   log(
     batch.uniform && batch.category
-      ? `Batch looks uniform (${batch.category}, confidence ${batch.confidence}).`
-      : `Mixed batch — classifying each failure. ${batch.reasoning}`,
+      ? `Shared root-cause hint: ${batch.category} (${batch.confidence}). Still classifying each test. ${batch.reasoning}`
+      : `No single shared cause. Classifying each failure. ${batch.reasoning}`,
   );
 
-  let grouped: Record<FailureCategory, CategorizedFailure[]>;
-
-  if (batch.uniform && batch.category && batch.category in emptyGrouped()) {
-    grouped = emptyGrouped();
-    grouped[batch.category] = asCategorized(failures);
-  } else {
-    const results = await triageAll(failures);
-    log(`Classified ${results.length} unexpected failure(s).`);
-    grouped = groupByCategory(results, failures);
-  }
-
-  // Per-test review can overturn a uniform real_bug batch (e.g. assertion
-  // vs test-intent mismatches that belong in test_script). Redistribute
-  // those so they never stay on the Jira board without a draft ticket.
-  const pendingRealBugs = grouped.real_bug.filter(
-    (item) => item.result?.category !== "real_bug" || !item.result.draftTicket,
-  );
-  if (pendingRealBugs.length > 0) {
-    log(`Reviewing ${pendingRealBugs.length} real-bug candidate(s) for Jira drafts…`);
-    const pendingFailures = pendingRealBugs.map((g) => g.failure);
-    const triageResults = await triageAll(pendingFailures);
-    const redistributed = groupByCategory(triageResults, pendingFailures);
-    const confirmed = grouped.real_bug.filter(
-      (item) => item.result?.category === "real_bug" && item.result.draftTicket,
-    );
-    grouped.real_bug = [
-      ...confirmed,
-      ...redistributed.real_bug.filter((item) => item.result?.draftTicket),
-    ];
-    for (const category of Object.keys(redistributed) as FailureCategory[]) {
-      if (category === "real_bug") continue;
-      grouped[category].push(...redistributed[category]);
-    }
-    const moved = triageResults.filter((r) => r.category !== "real_bug" || !r.draftTicket);
-    if (moved.length) {
-      log(
-        `Moved ${moved.length} item(s) off the Jira board after per-test review (${moved
-          .map((r) => `${r.testTitle} → ${r.category}`)
-          .join("; ")}).`,
-      );
-    }
-  }
+  const results = await triageAll(failures, 3, batch);
+  log(`Classified ${results.length} unexpected failure(s).`);
+  const grouped = groupByCategory(results, failures);
 
   const locatorDrift = await fillLocatorCards(grouped.locator_drift, log);
   const environmentInfra = await fillInfra(grouped.environment_infra, log);

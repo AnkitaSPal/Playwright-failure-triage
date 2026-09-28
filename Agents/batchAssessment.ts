@@ -37,10 +37,10 @@ function buildPrompt(failures: NormalizedFailure[]): string {
 
   return [
     `You are looking at ${count} failed Playwright tests from a single run.`,
-    "Before anyone classifies these one by one, decide: do the vast majority of them",
-    "share ONE common root cause (e.g. a single component/selector changed across",
-    "the app, or one shared piece of infrastructure is down), or are they a mix of",
-    "unrelated issues?",
+    "This is a run-level HINT only. Each test will still be classified on its own.",
+    "Decide: do the vast majority of them share ONE common root cause (e.g. a single",
+    "component/selector changed across the app, or one shared piece of infrastructure",
+    "is down), or are they a mix of unrelated issues?",
     "",
     "Failures:",
     failureList,
