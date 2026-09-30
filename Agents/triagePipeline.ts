@@ -9,6 +9,7 @@ import { assessBatch } from "./batchAssessment";
 import { verifyLocatorDriftBatch } from "./verifyLocatorDrift";
 import { assessInfraBatch } from "./assessInfraIssue";
 import { verifyRealBugFailure } from "./verifyRealBug";
+import { tryResolveLoginContext } from "./loginContext";
 import {
   buildJiraCandidates,
   fileApprovedTickets,
@@ -68,6 +69,65 @@ export function saveReport(report: TriageReport): void {
   fs.writeFileSync(cachePath, JSON.stringify(report, null, 2), "utf8");
 }
 
+/** Bump when grouping rules change so an old cache is not reused. */
+const ANALYSIS_REVISION = 3;
+
+const INFRA_FIRST_LINE =
+  /net::ERR_|ERR_INSUFFICIENT_RESOURCES|browserContext\.newPage|Target page, context or browser has been closed|worker process exited|ECONNRESET|ENOTFOUND|ERR_CONNECTION/i;
+const SNAPSHOT_ERROR = /toHaveScreenshot|toMatchSnapshot|toMatchAriaSnapshot/i;
+const LOCATOR_WAIT =
+  /waiting for (locator|getBy\w*|selector)|element\(s\) not found|strict mode violation/i;
+const LOCATOR_ACTION_TIMEOUT =
+  /TimeoutError: locator\.|locator\.(click|fill|hover|check|uncheck|press|textContent)\b[\s\S]*Timeout/i;
+
+/** Selector wait / not-found / strict-mode — these must get a live DOM lookup. */
+export function looksLikeLocatorTimeout(failure: NormalizedFailure): boolean {
+  const text = `${failure.errorMessage}\n${failure.errorStack}`;
+  if (SNAPSHOT_ERROR.test(text)) return false;
+  const firstLine = (failure.errorMessage.split("\n")[0] ?? "").trim();
+  if (INFRA_FIRST_LINE.test(firstLine)) return false;
+  if (LOCATOR_ACTION_TIMEOUT.test(text)) return true;
+  if (/expect\(locator\)/i.test(text) && LOCATOR_WAIT.test(text)) return true;
+  return /Timeout/i.test(text) && LOCATOR_WAIT.test(text);
+}
+
+function promoteLocatorTimeouts(
+  grouped: Record<FailureCategory, CategorizedFailure[]>,
+  log: LogFn,
+): void {
+  const otherCategories = (Object.keys(grouped) as FailureCategory[]).filter(
+    (category) => category !== "locator_drift" && category !== "snapshot_mismatch",
+  );
+  const moved: string[] = [];
+  for (const category of otherCategories) {
+    const stay: CategorizedFailure[] = [];
+    for (const item of grouped[category]) {
+      if (!looksLikeLocatorTimeout(item.failure)) {
+        stay.push(item);
+        continue;
+      }
+      grouped.locator_drift.push({
+        failure: item.failure,
+        result: {
+          testTitle: item.failure.testTitle,
+          category: "locator_drift",
+          confidence: item.result?.confidence ?? 0.9,
+          reasoning:
+            item.result?.reasoning ??
+            "Locator timeout / waiting-for-selector — classified for live DOM inspection.",
+        },
+      });
+      moved.push(`${item.failure.testTitle} (${category} → locator_drift)`);
+    }
+    grouped[category] = stay;
+  }
+  if (moved.length) {
+    log(
+      `Moved ${moved.length} locator-timeout failure(s) to locator_drift for live DOM inspection: ${moved.join("; ")}`,
+    );
+  }
+}
+
 /** Stable hash of the failure set so a rerun on the same Playwright result skips the LLM. */
 export function hashFailures(failures: NormalizedFailure[]): string {
   const canonical = failures
@@ -78,7 +138,9 @@ export function hashFailures(failures: NormalizedFailure[]): string {
     )
     .sort()
     .join("\n");
-  return createHash("sha256").update(canonical).digest("hex");
+  return createHash("sha256")
+    .update(`${ANALYSIS_REVISION}\n${canonical}`)
+    .digest("hex");
 }
 
 function emptyGrouped(): Record<FailureCategory, CategorizedFailure[]> {
@@ -122,18 +184,44 @@ async function fillLocatorCards(
   log: LogFn,
 ): Promise<LocatorCard[]> {
   if (items.length === 0) return [];
-  log(`Checking ${items.length} locator-drift failure(s) in a live browser session…`);
+
+  const ready: CategorizedFailure[] = [];
+  const blocked = new Map<string, string>();
+  for (const item of items) {
+    const resolved = tryResolveLoginContext(item.failure);
+    if (resolved.login) {
+      ready.push(item);
+      continue;
+    }
+    log(`Live DOM inspection skipped: ${resolved.error}`);
+    blocked.set(item.failure.testTitle, resolved.error ?? "Live lookup skipped.");
+  }
+
+  if (ready.length === 0) {
+    return items.map((item) => ({
+      ...item,
+      fix: null,
+      verifyHint: blocked.get(item.failure.testTitle) ?? null,
+    }));
+  }
+
+  log(`Checking ${ready.length} locator-drift failure(s) in a live browser session…`);
   try {
-    const fixes = await verifyLocatorDriftBatch(items.map((i) => i.failure));
+    const fixes = await verifyLocatorDriftBatch(ready.map((i) => i.failure));
     const byTitle = new Map(fixes.map((f) => [f.testTitle, f]));
     return items.map((item) => ({
       ...item,
       fix: byTitle.get(item.failure.testTitle) ?? null,
+      verifyHint: blocked.get(item.failure.testTitle) ?? null,
     }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log(`Locator verification failed: ${message}`);
-    return items.map((item) => ({ ...item, fix: null }));
+    return items.map((item) => ({
+      ...item,
+      fix: null,
+      verifyHint: blocked.get(item.failure.testTitle) ?? message,
+    }));
   }
 }
 
@@ -241,6 +329,8 @@ export async function runAnalysis(log: LogFn = console.log): Promise<TriageRepor
     }
   }
 
+  promoteLocatorTimeouts(grouped, log);
+
   const locatorDrift = await fillLocatorCards(grouped.locator_drift, log);
   const environmentInfra = await fillInfra(grouped.environment_infra, log);
 
@@ -300,9 +390,17 @@ export async function verifySelectedBugs(
 
   for (const card of next.realBugs) {
     if (!wanted.has(card.failure.testTitle)) continue;
+    const resolved = tryResolveLoginContext(card.failure);
+    if (resolved.error || !resolved.login) {
+      log(`Live verification skipped: ${resolved.error}`);
+      card.verification = null;
+      card.verifyHint = resolved.error ?? "Live lookup skipped.";
+      continue;
+    }
     log(`Live-verifying "${card.failure.testTitle}"…`);
     try {
       card.verification = await verifyRealBugFailure(card.failure);
+      card.verifyHint = null;
       log(
         card.verification.looksLikeGenuineBug
           ? `Confirmed as a likely real bug: ${card.failure.testTitle}`
@@ -311,6 +409,7 @@ export async function verifySelectedBugs(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log(`Verification failed for "${card.failure.testTitle}": ${message}`);
+      card.verifyHint = message;
     }
   }
 

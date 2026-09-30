@@ -10,6 +10,7 @@ import { assessBatch } from "./batchAssessment";
 import { verifyLocatorDriftBatch } from "./verifyLocatorDrift";
 import { assessInfraBatch } from "./assessInfraIssue";
 import { verifyRealBugFailure } from "./verifyRealBug";
+import { tryResolveLoginContext } from "./loginContext";
 import { assessManualReviewGuardrail, buildManualReviewPrompt } from "./gaurdRails";
 import { buildJiraCandidates, promptJiraSelection, fileApprovedTickets } from "./jiraLogging";
 import { config } from "./config";
@@ -108,8 +109,17 @@ async function routeByCategory(
 ) {
   switch (category) {
     case "locator_drift": {
-      // Requirement 2: one shared root cause -> one session for the whole group.
-      const fixes = await verifyLocatorDriftBatch(failures);
+      const ready: NormalizedFailure[] = [];
+      for (const failure of failures) {
+        const resolved = tryResolveLoginContext(failure);
+        if (resolved.login) {
+          ready.push(failure);
+          continue;
+        }
+        console.log(`Live lookup skipped: ${resolved.error}`);
+      }
+      if (ready.length === 0) break;
+      const fixes = await verifyLocatorDriftBatch(ready);
       console.log(`\n-- Locator drift fixes --`);
       console.log(JSON.stringify(fixes, null, 2));
       break;
@@ -178,7 +188,14 @@ async function routeByCategory(
       }
 
       const verifications = [];
-      for (const f of remainingFailures) verifications.push(await verifyRealBugFailure(f));
+      for (const f of remainingFailures) {
+        const resolved = tryResolveLoginContext(f);
+        if (resolved.error || !resolved.login) {
+          console.log(`Live lookup skipped: ${resolved.error}`);
+          continue;
+        }
+        verifications.push(await verifyRealBugFailure(f));
+      }
       console.log(`\n-- Real bug live verification --`);
       console.log(JSON.stringify(verifications, null, 2));
 

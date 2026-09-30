@@ -45,6 +45,34 @@ export function resolveLoginContext(failure: NormalizedFailure): LoginContext {
   return requireCreds(app, pair.role, pair.username, pair.password);
 }
 
+export function formatAppMatchHint(failure: NormalizedFailure): string {
+  const project = failure.projectName || "(none)";
+  const configured = config.apps.length
+    ? config.apps
+        .map((app) => `"${app.key}" (projectMatch: "${app.projectMatch}")`)
+        .join(", ")
+    : "(no apps[] entries in triage.config.json)";
+  return (
+    `No apps[] entry matches Playwright project "${project}" for "${failure.testTitle}". ` +
+    `Configured: ${configured}. ` +
+    `Set projectMatch to a substring of the project name (e.g. "supra" matches "supra-chromium"). ` +
+    `Live lookup was skipped.`
+  );
+}
+
+export function tryResolveLoginContext(
+  failure: NormalizedFailure,
+): { login?: LoginContext; error?: string } {
+  try {
+    return { login: resolveLoginContext(failure) };
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    const looksLikeAppMatch =
+      /Could not tell which app|No triage\.config\.json app /i.test(raw);
+    return { error: looksLikeAppMatch ? formatAppMatchHint(failure) : raw };
+  }
+}
+
 export function uniqueLoginContexts(failures: NormalizedFailure[]): LoginContext[] {
   const seen = new Set<string>();
   const out: LoginContext[] = [];
@@ -101,11 +129,7 @@ function appKeyFromFailure(failure: NormalizedFailure): string {
       return app.key;
     }
   }
-  throw new Error(
-    `Could not tell which app "${failure.testTitle}" belongs to ` +
-      `(project "${failure.projectName ?? ""}"). Add an apps[] entry in triage.config.json ` +
-      `whose projectMatch matches the Playwright project name.`,
-  );
+  throw new Error(formatAppMatchHint(failure));
 }
 
 function getAppProject(key: string, failure: NormalizedFailure): ResolvedApp {

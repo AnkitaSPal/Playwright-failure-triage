@@ -61,6 +61,10 @@ function buildPrompt(failures: NormalizedFailure[]): string {
     'Use "test_script" when titles/intent disagree with Expected vs Received',
     "(for example cursor should be pointer but the assertion expects default).",
     "Do not label that pattern real_bug or locator_drift.",
+    'A TimeoutError or expect(locator) timeout whose call log is "waiting for"',
+    "getByRole/getByText/locator, or element(s) not found, is locator_drift.",
+    "Do not set uniform environment_infra when any failure is only a locator wait",
+    "timeout, even if other tests in the same run crashed or ran out of resources.",
   ].join("\n");
 }
 

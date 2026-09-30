@@ -164,6 +164,10 @@ Each **unexpected** failure gets one isolated agent. Categories:
 
 If the batch said uniform `real_bug`, a second classify pass can **move** items to `test_script` (or others) so they leave the Jira board.
 
+After grouping, `promoteLocatorTimeouts` moves locator wait timeouts (`TimeoutError` on `locator.click` / `waiting for getByRole…`, or `expect(locator)` + element not found) into `locator_drift` even when the batch was uniform `environment_infra`. Those then get a live DOM inspection.
+
+If `apps[].projectMatch` does not match the Playwright project name, live lookup is skipped for that test (locator drift **and** real-bug verify). The dashboard log and the card show the configured `projectMatch` values and what to set (for example `"supra"` matches `supra-chromium`).
+
 ### 5. Auto follow-up during analysis — `triagePipeline.ts`
 
 After grouping:
@@ -174,7 +178,7 @@ After grouping:
 
 ### 6. Human: live-verify a real bug — `verifyRealBug.ts`
 
-One browser agent per selected test. Uses `loginContext.ts` (reads the spec’s login helper / role when `loginFromSpec` is on). Returns steps, expected, actual, DOM evidence, `looksLikeGenuineBug`. Session is always quit afterwards.
+One browser agent per selected test. Uses `loginContext.ts` (reads the spec’s login helper / role when `loginFromSpec` is on). Returns steps, expected, actual, DOM evidence, `looksLikeGenuineBug`. Session is always quit afterwards. A wrong `projectMatch` skips the browser and writes the same hint to the log and the real-bug card.
 
 CLI only: `gaurdRails.ts` asks y/n if real-bug count exceeds `realBugManualReviewThreshold` (default 5).
 

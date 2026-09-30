@@ -174,14 +174,16 @@ function renderRealBugs(cards) {
       const steps = (v?.stepsToReproduce || []).join("\n");
       const badge = filed
         ? filed
-        : !canFile
-          ? "Not fileable — no Jira draft"
-          : v
-            ? v.looksLikeGenuineBug
-              ? "Verified live"
-              : "Inconclusive"
-            : "Needs review";
-      const badgeClass = filed || v?.looksLikeGenuineBug ? "ok" : !canFile ? "warn" : v ? "warn" : "";
+        : card.verifyHint
+          ? "Live lookup skipped"
+          : !canFile
+            ? "Not fileable — no Jira draft"
+            : v
+              ? v.looksLikeGenuineBug
+                ? "Verified live"
+                : "Inconclusive"
+              : "Needs review";
+      const badgeClass = filed || v?.looksLikeGenuineBug ? "ok" : !canFile || card.verifyHint ? "warn" : v ? "warn" : "";
       const jiraFields = canFile
         ? `<label class="field">Jira summary
           <input name="summary" type="text" value="${escapeHtml(card.result.draftTicket.summary)}" />
@@ -206,6 +208,7 @@ function renderRealBugs(cards) {
         </div>
         <p class="meta">${escapeHtml(card.failure.filePath)} · ${escapeHtml(card.failure.projectName)} · confidence ${card.result.confidence ?? "—"}</p>
         <p>${escapeHtml(card.result.reasoning || "")}</p>
+        ${card.verifyHint ? `<p class="hint-warn">${escapeHtml(card.verifyHint)}</p>` : ""}
         ${jiraFields}
         ${v?.domEvidence ? `<p class="meta">DOM: ${escapeHtml(v.domEvidence)}</p>` : ""}
         <pre class="error-block">${escapeHtml(stripAnsi(card.failure.errorMessage))}</pre>
@@ -232,7 +235,9 @@ function renderLocators(cards) {
             ? `<p><strong>Broken:</strong> <code>${escapeHtml(fix.brokenLocator)}</code></p>
                <p><strong>Suggested:</strong> <code>${escapeHtml(fix.suggestedLocator ?? "none found")}</code></p>
                <p class="meta">${escapeHtml(fix.domEvidence)}</p>`
-            : `<p class="meta">No live locator suggestion yet.</p>`
+            : card.verifyHint
+              ? `<p class="hint-warn">${escapeHtml(card.verifyHint)}</p>`
+              : `<p class="meta">No live locator suggestion yet.</p>`
         }
         <pre class="error-block">${escapeHtml(stripAnsi(card.failure.errorMessage))}</pre>
         ${snapshotCompare(card.failure)}

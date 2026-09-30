@@ -48,8 +48,11 @@ function buildPrompt(failure: NormalizedFailure): string {
     failed (pixel, image, or ARIA snapshot diff). Use this even if Expected vs
     Received appears in the message, as long as it is a visual/snapshot compare.
   - locator_drift: ONLY a selector timeout, "waiting for locator/selector",
-    element not found, or "strict mode violation". Never use locator_drift for
-    a passing locator whose assertion value is simply wrong.
+    TimeoutError on locator.click/fill, expect(locator).toBeVisible (or similar)
+    with "element(s) not found", or "strict mode violation". Never use
+    locator_drift for a passing locator whose assertion value is simply wrong.
+    Do not fold a locator wait timeout into environment_infra just because
+    other tests in the same run crashed.
   - flaky_timing: an intermittent/race-condition-style failure, not explained by
     a UI or app change.
   - environment_infra: network errors, auth failures, missing test data,

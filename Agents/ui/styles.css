@@ -151,6 +151,16 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   align-items: start;
 }
 .meta { color: var(--muted); font-size: 13px; }
+.hint-warn {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--amber);
+  background: rgba(227, 161, 90, 0.12);
+  color: var(--amber);
+  font-size: 13px;
+  line-height: 1.45;
+}
 .badge {
   font-size: 11px;
   padding: 3px 8px;

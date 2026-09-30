@@ -13,12 +13,16 @@ export interface RealBugCard {
   result: TriageResult;
   verification: RealBugVerification | null;
   filing: JiraFilingResult | null;
+  /** Why live lookup did not run (wrong projectMatch, login, etc.). */
+  verifyHint?: string | null;
 }
 
 export interface LocatorCard {
   failure: NormalizedFailure;
   result?: TriageResult;
   fix: LocatorFix | null;
+  /** Why live lookup did not run (wrong projectMatch, login, etc.). */
+  verifyHint?: string | null;
 }
 
 export interface FlakyCard {
