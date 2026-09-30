@@ -60,17 +60,25 @@ export interface NormalizedFailure {
     function walk(suite: PlaywrightSuite) {
       for (const spec of suite.specs ?? []) {
         for (const test of spec.tests ?? []) {
-            if (test.status === "expected" || test.status === "skipped") continue;
+            if (
+              test.status === "expected" ||
+              test.status === "skipped" ||
+              test.status === "flaky"
+            ) {
+              continue;
+            }
           const results = test.results ?? [];
           if (results.length === 0) continue;
           const lastResult = results[results.length - 1];
-          const errorInfo = lastResult.error ?? lastResult.errors?.[0];
-          const screenshot = lastResult.attachments?.find(
+          const failedResult =
+            [...results].reverse().find((r) => r.status !== "passed") ?? lastResult;
+          const errorInfo = failedResult.error ?? failedResult.errors?.[0];
+          const screenshot = (failedResult.attachments ?? lastResult.attachments)?.find(
             (a) => a.contentType === "image/png"
           );
-          const snapshotExpected = findAttachment(lastResult.attachments, "expected");
-          const snapshotActual = findAttachment(lastResult.attachments, "actual");
-          const snapshotDiff = findAttachment(lastResult.attachments, "diff");
+          const snapshotExpected = findAttachment(failedResult.attachments ?? lastResult.attachments, "expected");
+          const snapshotActual = findAttachment(failedResult.attachments ?? lastResult.attachments, "actual");
+          const snapshotDiff = findAttachment(failedResult.attachments ?? lastResult.attachments, "diff");
           failures.push({
             testTitle: spec.title,
             projectName: test.projectName,
@@ -85,7 +93,7 @@ export interface NormalizedFailure {
             snapshotExpectedPath: snapshotExpected?.path,
             snapshotActualPath: snapshotActual?.path,
             snapshotDiffPath: snapshotDiff?.path,
-            errorLocation: lastResult.errorLocation,
+            errorLocation: failedResult.errorLocation ?? lastResult.errorLocation,
           });
         }
       }

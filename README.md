@@ -64,7 +64,9 @@ npx playwright-triage ui
 
 Dashboard: `http://localhost:3001` → **Run analysis**.
 
-The first analysis calls the classifier LLM and writes `.triage/last-triage-report.json` (including a `sourceHash` of the failure set). **Run analysis** again, or `npx playwright-triage`, **skips the LLM** when title, project, status, and error text are unchanged. The activity log will say *Reusing cached categories; skipped LLM.* Live-verify and Jira results on that cache are kept.
+The first analysis asks whether the run shares one root cause (a hint on the dashboard), then **classifies each unexpected failure**. A click timeout is not stamped Infra just because four other tests crashed the worker.
+
+It writes `.triage/last-triage-report.json` (including a `sourceHash` of the failure set). **Run analysis** again, or `npx playwright-triage`, **skips the LLM** when title, project, status, and error text are unchanged. The activity log will say *Reusing cached categories; skipped LLM.* Live-verify and Jira results on that cache are kept.
 
 A new test run that changes an error (or deleting `.triage/last-triage-report.json`) forces a fresh classification.
 

@@ -52,23 +52,16 @@ async function main() {
     return;
   }
 
-  // Step 1 (requirement 1 & 5): ask the LLM if this batch shares one root
-  // cause before spending a classification call per failure.
   const batch = await assessBatch(failures);
-
   if (batch.uniform && batch.category) {
     console.log(
-      `${failures.length} failures look like a single ${batch.category} cause: ${batch.reasoning}`,
+      `Shared root-cause hint (${batch.category}): ${batch.reasoning}`,
     );
-    await routeByCategory(batch.category, failures);
-    return;
+  } else {
+    console.log(`No single shared cause (${batch.reasoning}).`);
   }
-
-  // Mixed batch — fall back to per-failure classification, then group.
-  console.log(
-    `Failures don't share one root cause (${batch.reasoning}). Classifying individually.`,
-  );
-  const results = await triageAll(failures);
+  console.log("Classifying each unexpected failure…");
+  const results = await triageAll(failures, 3, batch);
   const grouped = groupByCategory(results, failures);
 
   for (const category of Object.keys(grouped) as FailureCategory[]) {
